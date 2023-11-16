@@ -17,8 +17,7 @@ def rotate_x(obj, angle):
         [0, np.cos(rad), -np.sin(rad)],
         [0, np.sin(rad), np.cos(rad)]
     ])
-    return np.dot(obj, rotation_matrix.T)
-
+    return np.dot(obj, rotation_matrix)
 
 def rotate_y(obj, angle):
     """ Поворот объекта вокруг оси Y. """
@@ -28,8 +27,7 @@ def rotate_y(obj, angle):
         [0, 1, 0],
         [-np.sin(rad), 0, np.cos(rad)]
     ])
-    return np.dot(obj, rotation_matrix.T)
-
+    return np.dot(obj, rotation_matrix)
 
 def rotate_z(obj, angle):
     """ Поворот объекта вокруг оси Z. """
@@ -39,7 +37,7 @@ def rotate_z(obj, angle):
         [np.sin(rad), np.cos(rad), 0],
         [0, 0, 1]
     ])
-    return np.dot(obj, rotation_matrix.T)
+    return np.dot(obj, rotation_matrix)
 
 
 def translate(obj, shift):
@@ -85,9 +83,22 @@ def create_cube(edge_length=2):
     ])
     return points
 
+def get_cube_edges(points):
+    # Определение граней куба
+    return [
+        [points[0], points[1], points[2], points[3]],
+        [points[4], points[5], points[6], points[7]],
+        [points[0], points[1], points[5], points[4]],
+        [points[2], points[3], points[7], points[6]],
+        [points[1], points[2], points[6], points[5]],
+        [points[4], points[7], points[3], points[0]]
+    ]
 
 def draw_cube(ax, points, edge_length=2, invisible_faces=[]):
+
     half = edge_length / 2
+    edges = get_cube_edges(points)
+
     edges = [
         [points[0], points[1], points[2], points[3]],
         [points[4], points[5], points[6], points[7]],
@@ -116,25 +127,28 @@ def draw_pyramid(ax, points, base_size=2, height=3):
         ax.plot(*zip(*edge), color='b')
 
 
-
 def calculate_normals(points):
-    # Рассчитываем нормали для каждой грани
+    # Определите центр куба, чтобы знать, в какую сторону направлены нормали
+    center = np.mean(points, axis=0)
     normals = []
-    for i in range(len(points)):
-        if i < len(points) - 1:
-            edge1 = points[i + 1] - points[i]
-        else:
-            edge1 = points[0] - points[i]
-        if i < len(points) - 2:
-            edge2 = points[i + 2] - points[i]
-        elif i == len(points) - 2:
-            edge2 = points[0] - points[i]
-        else:
-            edge2 = points[1] - points[i]
-        normal = np.cross(edge1, edge2)
-        normals.append(normal / np.linalg.norm(normal))
-    return normals
 
+    # Нормали для каждой грани
+    faces = get_cube_edges(points)
+    for face in faces:
+        # Возьмем первые три точки из каждой грани для расчета нормали
+        v1, v2, v3 = face[:3]
+        # Расчет векторов на плоскости грани
+        edge1 = v2 - v1
+        edge2 = v3 - v1
+        # Векторное произведение этих векторов дает нормаль
+        normal = np.cross(edge1, edge2)
+        # Нормализация нормали
+        normal = normal / np.linalg.norm(normal)
+        # Убедимся, что нормаль направлена наружу от центра
+        if np.dot(normal, center - v1) > 0:
+            normal = -normal
+        normals.append(normal)
+    return normals
 
 def find_visible_faces(points, normals, viewer_position):
     visible_faces = []
@@ -209,17 +223,20 @@ def apply_rotation():
 
 
 # Функция для применения удаления невидимых граней
+
 def apply_backface_culling():
-    global object_normals, viewer_position
+    global object_normals, object_points, viewer_position
+    # Нет необходимости заново рассчитывать нормали, используем глобальную переменную
     invisible_faces = []
 
+    edges = get_cube_edges(object_points)
     for i, normal in enumerate(object_normals):
-        # Если нормаль направлена к наблюдателю, то грань видима, иначе - невидима
-        if np.dot(normal, viewer_position) > 0:
+        face_center = np.mean(edges[i], axis=0)
+        view_vector = viewer_position - face_center
+        if np.dot(normal, view_vector) > 0:  # Здесь определяем видимость грани
             invisible_faces.append(i)
 
-    # Перерисовка куба с невидимыми гранями
-    draw_cube(ax, object_points, 2, invisible_faces=invisible_faces)
+    draw_cube(ax, object_points, invisible_faces=invisible_faces)
     canvas.draw()
 
 
@@ -311,9 +328,9 @@ ax = fig.add_subplot(111, projection='3d')
 
 # Глобальные переменные
 object_points: ndarray[Any, dtype[Any]] = create_cube()  # Начальное значение
-object_normals = calculate_normals(object_points)  # Начальные нормали
-viewer_position = np.array([0, 0, 10])  # Позиция наблюдателя
-perspective_distance = 5  # Начальное значение
+object_normals = calculate_normals(object_points)   # Начальные нормали
+viewer_position = np.array([-2, -2, -2])  # Позиция наблюдателя
+perspective_distance = 1  # Начальное значение
 backface_culling_enabled = tk.BooleanVar()
 perspective_projection_enabled = tk.BooleanVar()
 backface_culling_enabled.set(False)  # Исходно отключено
